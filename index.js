@@ -11,14 +11,14 @@ const bot = new djs.Client({
 
 const config = process.env;
 
-const fetchCrypto = async (name) => {
-  const APIKEY = process.env.APP_STOCK_API;
+const fetchCrypto = (name) => {
+
+  const APIKEY = config.APP_STOCK_API;
   let market = 'USD';
   let symbol = name;
-  let cryptoInfo = [];
   const APICALL = `https://www.alphavantage.co/query?function=CRYPTO_INTRADAY&symbol=${symbol}&market=${market}&interval=60min&apikey=${APIKEY}`;
 
-  await axios.get(APICALL)
+  return axios.get(APICALL)
     .then(
       function (response) {
 
@@ -27,30 +27,29 @@ const fetchCrypto = async (name) => {
         try {
           let latestDate = data['Meta Data']["6. Last Refreshed"];
           let timeSeriesData = data['Time Series Crypto (60min)'][latestDate];
-          cryptoInfo = buildInfoList(symbol, latestDate, timeSeriesData);
+          let cryptoInfo = buildInfo(symbol, latestDate, timeSeriesData);
+          return cryptoInfo;
         }
 
         catch (err) {
           console.log(err);
-          return [];
+          return null;
         }
 
       }, (err) => {
         console.log(err);
-        return [];
+        return null;
       }
     );
 
-  return cryptoInfo;
 }
 
-const fetchStock = async (name) => {
-  const APIKEY = process.env.APP_STOCK_API;
+const fetchStock = (name) => {
+  const APIKEY = config.APP_STOCK_API;
   let symbol = name;
-  let stockList = [];
   const APICALL = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${symbol}&interval=60min&apikey=${APIKEY}`;
 
-  await axios.get(APICALL)
+  return axios.get(APICALL)
     .then(
       function (response) {
 
@@ -59,28 +58,25 @@ const fetchStock = async (name) => {
         try {
           let latestDate = data['Meta Data']["3. Last Refreshed"];
           let timeSeriesData = data['Time Series (60min)'][latestDate];
-          stockList = buildInfoList(symbol, latestDate, timeSeriesData);
+          let stockInfo = buildInfo(symbol, latestDate, timeSeriesData);
+          return stockInfo;
         }
 
         catch (err) {
           console.log(err);
-          return [];
+          return null;
         }
 
       }, (err) => {
         console.log(err);
-        return [];
+        return null;
       }
     );
-
-  return stockList;
 }
 
-const buildInfoList = (symbol, latestDate, timeSeriesData) => {
+const buildInfo = (symbol, latestDate, timeSeriesData) => {
 
-  let infoList = [];
-
-  infoList.push({
+  return {
     dateRefresh: latestDate,
     openPrice: timeSeriesData['1. open'],
     highPrice: timeSeriesData['2. high'],
@@ -88,15 +84,10 @@ const buildInfoList = (symbol, latestDate, timeSeriesData) => {
     closePrice: timeSeriesData['4. close'],
     volume: timeSeriesData['5. volume'],
     ticker: symbol
-  });
-
-  return infoList;
-
+  };
 }
 
 const buildReplyContent = async (msg, { dateRefresh, openPrice, highPrice, lowPrice, closePrice, volume, ticker }) => {
-
-  volume = +volume * 1000; //convert to number and multiply by thousand
 
   let message = `
     ticker: ${ticker} 
@@ -117,7 +108,7 @@ const buildReplyContent = async (msg, { dateRefresh, openPrice, highPrice, lowPr
 bot.on("ready", () => {
 
   console.log(`bot ${bot.user.tag} is ready`);
-  const guildId = process.env.GUILD_ID;
+  const guildId = config.GUILD_ID;
   const guild = bot.guilds.cache.get(guildId);
   let commands;
 
@@ -125,7 +116,7 @@ bot.on("ready", () => {
     commands = guild.commands;
   }
   else {
-    commands = client.application?.commands;
+    commands = bot.application?.commands;
   }
 
   commands?.create({
@@ -158,10 +149,10 @@ bot.on('interactionCreate', async (msg) => {
 
   if (commandName === 'stockinfo') {
 
-    const name = options.getString('name').toUpperCase();
+    const name = options.getString('name')?.toUpperCase();
     let info = await fetchStock(name);
 
-    if (info.length == 0) {
+    if (!info) {
       await msg.reply({
         content: "Error retrieving stock data...",
         ephemeral: true
@@ -170,15 +161,15 @@ bot.on('interactionCreate', async (msg) => {
       return;
     }
 
-    buildReplyContent(msg, info[0]);
+    buildReplyContent(msg, info);
 
   }
   else if (commandName === 'cryptoinfo') {
 
-    const name = options.getString('name').toUpperCase();
+    const name = options.getString('name')?.toUpperCase();
     let info = await fetchCrypto(name);
 
-    if (info.length == 0) {
+    if (!info) {
       await msg.reply({
         content: "Error retrieving crypto data...",
         ephemeral: true
@@ -187,7 +178,7 @@ bot.on('interactionCreate', async (msg) => {
       return;
     }
 
-    buildReplyContent(msg, info[0]);
+    buildReplyContent(msg, info);
 
   }
 });
